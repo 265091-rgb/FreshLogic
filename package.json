@@ -1,0 +1,38 @@
+{
+  "name": "freshlogic",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.15.7",
+    "@react-navigation/native": "^7.2.0",
+    "@supabase/supabase-js": "^2.100.0",
+    "expo": "~55.0.8",
+    "expo-barcode-scanner": "^13.0.1",
+    "expo-status-bar": "~55.0.4",
+    "lucide-react-native": "^1.0.1",
+    "react": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0",
+    "react-native-svg": "^15.15.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
