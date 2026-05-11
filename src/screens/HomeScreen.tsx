@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Settings } from 'lucide-react-native';
 
 import { useAuth } from '../hooks/useAuth';
 import AlertCard from '../components/AlertCard';
@@ -81,8 +80,8 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>Hello, {displayName}</Text>
           <View style={styles.headerRight}>
             <Text style={styles.streak}>🔥 0</Text>
-            <TouchableOpacity style={styles.settingsBtn} onPress={() => {}}>
-              <Settings size={22} color="#6B7566" />
+            <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')}>
+              <Text style={styles.settingsIcon}>⚙️</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -211,6 +210,9 @@ const styles = StyleSheet.create({
   },
   settingsBtn: {
     padding: 4,
+  },
+  settingsIcon: {
+    fontSize: 20,
   },
   divider: {
     height: 1,

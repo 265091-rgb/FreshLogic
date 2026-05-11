@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, Refrigerator, Plus, ChefHat, ShoppingCart } from 'lucide-react-native';
 
 import HomeScreen from '../screens/HomeScreen';
 import FridgeScreen from '../screens/FridgeScreen';
@@ -14,14 +13,16 @@ const Tab = createBottomTabNavigator();
 const ACTIVE = '#6B7F5F';
 const INACTIVE = '#A8B89F';
 
-function AddTabButton({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) {
+function TabIcon({ emoji, color }: { emoji: string; color: string }) {
+  return <Text style={{ fontSize: 22, opacity: color === ACTIVE ? 1 : 0.5 }}>{emoji}</Text>;
+}
+
+function AddTabButton({ onPress }: { children?: React.ReactNode; onPress?: () => void }) {
   return (
-    <TouchableOpacity
-      style={styles.addButton}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={styles.addButtonInner}>{children}</View>
+    <TouchableOpacity style={styles.addButton} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.addButtonInner}>
+        <Text style={styles.addButtonIcon}>+</Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -41,21 +42,20 @@ export default function AppNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
         }}
       />
       <Tab.Screen
         name="Fridge"
         component={FridgeScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Refrigerator color={color} size={size} />,
+          tabBarIcon: ({ color }) => <TabIcon emoji="🧊" color={color} />,
         }}
       />
       <Tab.Screen
         name="Add"
         component={AddFoodScreen}
         options={{
-          tabBarIcon: ({ color }) => <Plus color={color} size={28} />,
           tabBarButton: (props) => <AddTabButton {...props} />,
           tabBarLabel: () => null,
         }}
@@ -64,14 +64,14 @@ export default function AppNavigator() {
         name="Recipes"
         component={RecipesScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <ChefHat color={color} size={size} />,
+          tabBarIcon: ({ color }) => <TabIcon emoji="👨‍🍳" color={color} />,
         }}
       />
       <Tab.Screen
         name="List"
         component={ListScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <ShoppingCart color={color} size={size} />,
+          tabBarIcon: ({ color }) => <TabIcon emoji="🛒" color={color} />,
         }}
       />
     </Tab.Navigator>

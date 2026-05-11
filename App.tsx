@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider, useAuthContext } from './src/contexts/AuthContext';
-import AppNavigator from './src/navigation/AppNavigator';
+import RootNavigator from './src/navigation/RootNavigator';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
 
@@ -31,7 +31,7 @@ function RootContent() {
 
   return (
     <NavigationContainer>
-      <AppNavigator />
+      <RootNavigator />
     </NavigationContainer>
   );
 }
