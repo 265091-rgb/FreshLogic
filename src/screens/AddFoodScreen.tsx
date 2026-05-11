@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Platform, ActivityIndicator, Alert, Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { addItem } from '../services/inventory.service';
 import { lookupBarcode, defaultExpiryDate, mapCategory } from '../services/barcode.service';
@@ -24,6 +24,7 @@ interface FormState {
 
 export default function AddFoodScreen() {
   const { supabaseUser } = useAuth();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [mode, setMode] = useState<Mode>('choose');
   const [form, setForm] = useState<FormState>({
@@ -41,14 +42,20 @@ export default function AddFoodScreen() {
     }
   }, []);
 
-  // Pre-fill from shopping list "Add to fridge" flow
-  useEffect(() => {
-    const prefillName = route.params?.prefillName as string | undefined;
-    if (prefillName) {
-      setForm({ name: prefillName, category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other') });
-      setMode('form');
-    }
-  }, [route.params?.prefillName]);
+  // Pre-fill from shopping list "Add to fridge" flow.
+  // useFocusEffect fires every time this tab gains focus, which is what we
+  // need since tab screens stay mounted and useEffect won't re-fire for the
+  // same param value. We clear the param after use so it re-triggers correctly.
+  useFocusEffect(
+    useCallback(() => {
+      const prefillName = route.params?.prefillName as string | undefined;
+      if (prefillName) {
+        setForm({ name: prefillName, category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other') });
+        setMode('form');
+        navigation.setParams({ prefillName: undefined });
+      }
+    }, [route.params?.prefillName])
+  );
 
   async function requestCameraPermission() {
     if (Platform.OS === 'web') {
