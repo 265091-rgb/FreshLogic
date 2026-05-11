@@ -159,11 +159,15 @@ export default function FridgeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B9D83" />}
       >
-        {totalItems === 0 && !loading ? (
+        {sections.every((s) => s.items.length === 0) ? (
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🧊</Text>
-            <Text style={styles.emptyTitle}>Your fridge is empty</Text>
-            <Text style={styles.emptySub}>Scan a barcode or add items manually to get started.</Text>
+            <Text style={styles.emptyTitle}>{debouncedSearch ? 'No results' : 'Your fridge is empty'}</Text>
+            <Text style={styles.emptySub}>
+              {debouncedSearch
+                ? `Nothing matched "${debouncedSearch}"`
+                : 'Scan a barcode or add items manually to get started.'}
+            </Text>
           </View>
         ) : (
           sections.map((section) => (

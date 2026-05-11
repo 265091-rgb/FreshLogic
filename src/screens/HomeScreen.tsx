@@ -147,7 +147,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Stats */}
-        <View style={styles.statsCard}>
+        <TouchableOpacity style={styles.statsCard} onPress={() => navigation.navigate('Stats')} activeOpacity={0.85}>
           <Text style={styles.sectionTitle}>📊 This Week</Text>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
@@ -167,7 +167,7 @@ export default function HomeScreen() {
               <Text style={styles.statLabel}>Saved</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
