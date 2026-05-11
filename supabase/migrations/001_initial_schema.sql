@@ -53,20 +53,31 @@ CREATE TABLE public.inventory (
   quantity DECIMAL(8,2) NOT NULL,
   unit TEXT NOT NULL,
   expiration_date DATE,
-  status TEXT GENERATED ALWAYS AS (
-    CASE
-      WHEN expiration_date IS NULL THEN 'fresh'
-      WHEN expiration_date < CURRENT_DATE THEN 'expired'
-      WHEN expiration_date <= CURRENT_DATE + INTERVAL '3 days' THEN 'expiring_soon'
-      ELSE 'fresh'
-    END
-  ) STORED,
+  status TEXT NOT NULL DEFAULT 'fresh',
   added_date TIMESTAMPTZ DEFAULT NOW(),
   last_modified TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_inventory_user_expiry ON public.inventory(user_id, expiration_date);
 CREATE INDEX idx_inventory_status ON public.inventory(user_id, status);
+
+-- Trigger to keep status in sync with expiration_date on insert/update
+CREATE OR REPLACE FUNCTION compute_inventory_status()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.status := CASE
+    WHEN NEW.expiration_date IS NULL THEN 'fresh'
+    WHEN NEW.expiration_date < CURRENT_DATE THEN 'expired'
+    WHEN NEW.expiration_date <= CURRENT_DATE + INTERVAL '3 days' THEN 'expiring_soon'
+    ELSE 'fresh'
+  END;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_inventory_status
+  BEFORE INSERT OR UPDATE ON public.inventory
+  FOR EACH ROW EXECUTE FUNCTION compute_inventory_status();
 
 -- 5. Recipes
 CREATE TABLE public.recipes (
