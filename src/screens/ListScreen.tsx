@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import ShoppingListItem from '../components/ShoppingListItem';
 import {
@@ -13,6 +14,7 @@ import { ShoppingListItem as Item } from '../types';
 
 export default function ListScreen() {
   const { supabaseUser } = useAuth();
+  const navigation = useNavigation<any>();
   const [items, setItems] = useState<Item[]>([]);
   const [common, setCommon] = useState<string[]>([]);
   const [text, setText] = useState('');
@@ -58,6 +60,17 @@ export default function ListScreen() {
       await toggleChecked(item.id, newChecked);
     } catch {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, checked: item.checked } : i)));
+    }
+
+    if (newChecked) {
+      Alert.alert(
+        'Add to fridge?',
+        `Do you want to add "${item.name}" to your fridge inventory?`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Add to Fridge', onPress: () => navigation.navigate('Add', { prefillName: item.name }) },
+        ]
+      );
     }
   }
 

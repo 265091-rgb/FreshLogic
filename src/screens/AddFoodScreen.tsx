@@ -4,6 +4,7 @@ import {
   ScrollView, Platform, ActivityIndicator, Alert, Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { addItem } from '../services/inventory.service';
 import { lookupBarcode, defaultExpiryDate, mapCategory } from '../services/barcode.service';
@@ -23,6 +24,7 @@ interface FormState {
 
 export default function AddFoodScreen() {
   const { supabaseUser } = useAuth();
+  const route = useRoute<any>();
   const [mode, setMode] = useState<Mode>('choose');
   const [form, setForm] = useState<FormState>({
     name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: '',
@@ -38,6 +40,15 @@ export default function AddFoodScreen() {
       import('expo-barcode-scanner').then((mod) => setScanner(() => mod.BarCodeScanner));
     }
   }, []);
+
+  // Pre-fill from shopping list "Add to fridge" flow
+  useEffect(() => {
+    const prefillName = route.params?.prefillName as string | undefined;
+    if (prefillName) {
+      setForm({ name: prefillName, category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other') });
+      setMode('form');
+    }
+  }, [route.params?.prefillName]);
 
   async function requestCameraPermission() {
     if (Platform.OS === 'web') {
