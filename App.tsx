@@ -8,6 +8,8 @@ import { AuthProvider, useAuthContext } from './src/contexts/AuthContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import OfflineBanner from './src/components/OfflineBanner';
 
 function RootContent() {
   const { session, loading } = useAuthContext();
@@ -31,6 +33,7 @@ function RootContent() {
 
   return (
     <NavigationContainer>
+      <OfflineBanner />
       <RootNavigator />
     </NavigationContainer>
   );
@@ -38,12 +41,14 @@ function RootContent() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <StatusBar style="dark" />
-        <RootContent />
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <StatusBar style="dark" />
+          <RootContent />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
