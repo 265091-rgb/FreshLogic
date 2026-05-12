@@ -27,6 +27,7 @@ export interface InventoryItem {
   category: string;
   quantity: number;
   unit: string;
+  serving_size?: number;
   expiration_date?: string;
   status: ItemStatus;
   added_date: string;

@@ -135,7 +135,10 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
   const days = daysUntilExpiry(item.expiration_date);
   const color = expiryColor(days);
   const serving = getServingConfig(item);
-  const step = serving ? serving.step : defaultStep(item.quantity);
+  // Stored serving_size takes priority over the heuristic
+  const step = (item.serving_size && item.serving_size > 0)
+    ? item.serving_size
+    : serving ? serving.step : defaultStep(item.quantity);
   const remaining = Math.max(0, item.quantity - useAmount);
 
   // Human-readable labels for slider readout
