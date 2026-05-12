@@ -9,6 +9,8 @@ interface Props {
   onDelete: () => void;
 }
 
+// ─── Expiry helpers ───────────────────────────────────────────────────────────
+
 function daysUntilExpiry(dateStr?: string): number | null {
   if (!dateStr) return null;
   const diff = new Date(dateStr).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0);
@@ -30,7 +32,91 @@ function expiryColor(days: number | null): string {
   return '#6B7F5F';
 }
 
-function sliderStep(qty: number): number {
+// ─── Serving config ───────────────────────────────────────────────────────────
+
+interface ServingConfig {
+  step: number;                          // slider step in stored unit
+  toServings: (qty: number) => number;   // stored qty → human-readable count
+  label: (n: number) => string;          // e.g. "2 cups", "3 eggs", "16 fl oz"
+  buttonHint: string;                    // shown on the collapsed Use button
+}
+
+function getServingConfig(item: Item): ServingConfig | null {
+  const name = item.name.toLowerCase();
+  const unit = item.unit.toLowerCase();
+
+  // ── Eggs (any count, step by single egg) ──────────────────────────────────
+  if (name.includes('egg') && unit === 'count' && item.quantity >= 1) {
+    return {
+      step: 1,
+      toServings: (q) => Math.round(q),
+      label: (n) => n === 1 ? '1 egg' : `${n} eggs`,
+      buttonHint: 'by egg',
+    };
+  }
+
+  // ── Gallons → cups (1 cup = 1/16 gal = 0.0625) ───────────────────────────
+  if (unit === 'gallon' && item.quantity >= 0.0625) {
+    return {
+      step: 0.0625,
+      toServings: (q) => Math.round(q / 0.0625),
+      label: (n) => n === 1 ? '1 cup' : `${n} cups`,
+      buttonHint: 'by cup',
+    };
+  }
+
+  // ── Litres → cups (1 cup ≈ 0.25 L for clean steps) ──────────────────────
+  if (unit === 'l' && item.quantity >= 0.25) {
+    return {
+      step: 0.25,
+      toServings: (q) => Math.round(q / 0.25),
+      label: (n) => n === 1 ? '1 cup' : `${n} cups`,
+      buttonHint: 'by cup',
+    };
+  }
+
+  // ── fl oz / oz → cups (8 fl oz = 1 cup); show fl oz too ──────────────────
+  if ((unit === 'oz' || unit === 'fl oz') && item.quantity >= 8) {
+    return {
+      step: 8,
+      toServings: (q) => Math.round(q / 8),
+      label: (n) => n === 1 ? '8 fl oz (1 cup)' : `${n * 8} fl oz (${n} cups)`,
+      buttonHint: 'by cup',
+    };
+  }
+
+  // ── oz / fl oz < 8 → single fl oz steps ──────────────────────────────────
+  if ((unit === 'oz' || unit === 'fl oz') && item.quantity >= 1) {
+    return {
+      step: 1,
+      toServings: (q) => Math.round(q),
+      label: (n) => `${n} fl oz`,
+      buttonHint: 'by fl oz',
+    };
+  }
+
+  // ── ml → 250 ml steps (≈ 1 cup) for large; 50 ml for small ───────────────
+  if (unit === 'ml' && item.quantity >= 250) {
+    return {
+      step: 250,
+      toServings: (q) => Math.round(q / 250),
+      label: (n) => `${n * 250} ml`,
+      buttonHint: 'by 250 ml',
+    };
+  }
+  if (unit === 'ml' && item.quantity >= 50) {
+    return {
+      step: 50,
+      toServings: (q) => Math.round(q / 50),
+      label: (n) => `${n * 50} ml`,
+      buttonHint: 'by 50 ml',
+    };
+  }
+
+  return null; // fall back to generic decimal slider
+}
+
+function defaultStep(qty: number): number {
   if (qty <= 1) return 0.1;
   if (qty <= 5) return 0.25;
   return 0.5;
@@ -40,29 +126,47 @@ function fmt(n: number): string {
   return Number(n.toFixed(2)).toString();
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default React.memo(function InventoryItem({ item, onUse, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false);
-  // Slider controls amount to USE (0 = use nothing, item.quantity = use all)
-  const [useAmount, setUseAmount] = useState(item.quantity / 2);
+  const [useAmount, setUseAmount] = useState(0);
 
   const days = daysUntilExpiry(item.expiration_date);
   const color = expiryColor(days);
+  const serving = getServingConfig(item);
+  const step = serving ? serving.step : defaultStep(item.quantity);
   const remaining = Math.max(0, item.quantity - useAmount);
-  const step = sliderStep(item.quantity);
+
+  // Human-readable labels for slider readout
+  const usingLabel = serving
+    ? serving.label(serving.toServings(useAmount))
+    : `${fmt(useAmount)} ${item.unit}`;
+  const leftLabel = serving
+    ? serving.label(serving.toServings(remaining))
+    : `${fmt(remaining)} ${item.unit}`;
+
+  // Edge labels for min/max ends of the slider
+  const edgeMin = serving ? serving.label(0) : '0';
+  const edgeMax = serving
+    ? serving.label(serving.toServings(item.quantity))
+    : `${fmt(item.quantity)} ${item.unit}`;
 
   function handleOpen() {
-    setUseAmount(item.quantity / 2);
+    // Default to half when opening (snapped to nearest step)
+    const half = Math.round((item.quantity / 2) / step) * step;
+    setUseAmount(Math.min(half, item.quantity));
     setExpanded(true);
   }
 
   function handleApply() {
-    onUse(Math.max(0, Math.round(remaining * 100) / 100));
+    onUse(Math.max(0, Math.round(remaining * 1000) / 1000));
     setExpanded(false);
   }
 
   return (
     <View style={styles.card}>
-      {/* Top row: name / qty / expiry */}
+      {/* Top row */}
       <View style={styles.top}>
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
@@ -71,11 +175,13 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
         <Text style={[styles.expiry, { color }]}>{expiryLabel(days)}</Text>
       </View>
 
-      {/* Compact actions */}
+      {/* Collapsed */}
       {!expanded && (
         <View style={styles.actions}>
           <TouchableOpacity style={styles.useBtn} onPress={handleOpen} activeOpacity={0.8}>
-            <Text style={styles.useBtnText}>Use…</Text>
+            <Text style={styles.useBtnText}>
+              {serving ? `Use… (${serving.buttonHint})` : 'Use…'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btnDelete} onPress={onDelete} activeOpacity={0.8}>
             <Text style={styles.btnDeleteText}>🗑</Text>
@@ -88,10 +194,10 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
         <View style={styles.sliderSection}>
           <View style={styles.sliderLabels}>
             <Text style={styles.labelUsing}>
-              Using <Text style={styles.labelValue}>{fmt(useAmount)} {item.unit}</Text>
+              Using <Text style={styles.labelValue}>{usingLabel}</Text>
             </Text>
             <Text style={styles.labelLeft}>
-              Left <Text style={styles.labelValue}>{fmt(remaining)} {item.unit}</Text>
+              Left <Text style={styles.labelValue}>{leftLabel}</Text>
             </Text>
           </View>
 
@@ -108,8 +214,8 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
           />
 
           <View style={styles.sliderEdges}>
-            <Text style={styles.edgeLabel}>0</Text>
-            <Text style={styles.edgeLabel}>{fmt(item.quantity)} {item.unit}</Text>
+            <Text style={styles.edgeLabel}>{edgeMin}</Text>
+            <Text style={styles.edgeLabel}>{edgeMax}</Text>
           </View>
 
           <View style={styles.sliderActions}>
@@ -133,20 +239,16 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
   );
 });
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E8EDE6',
+    backgroundColor: '#fff', borderRadius: 12, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: '#E8EDE6',
   },
   top: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 10,
   },
   info: { flex: 1, marginRight: 12 },
   name: { fontSize: 15, fontWeight: '700', color: '#2D3319', marginBottom: 2 },
@@ -154,56 +256,38 @@ const styles = StyleSheet.create({
   expiry: { fontSize: 12, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 8 },
   useBtn: {
-    flex: 1,
-    backgroundColor: '#6B7F5F',
-    borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
+    flex: 1, backgroundColor: '#6B7F5F', borderRadius: 8,
+    paddingVertical: 7, alignItems: 'center',
   },
   useBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   btnDelete: {
-    width: 36,
-    backgroundColor: '#FFF2F2',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#F5D0CE',
+    width: 36, backgroundColor: '#FFF2F2', borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#F5D0CE',
   },
   btnDeleteText: { fontSize: 14 },
   sliderSection: { gap: 4 },
   sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+    flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2,
   },
   labelUsing: { fontSize: 12, color: '#6B7566' },
   labelLeft: { fontSize: 12, color: '#6B7566' },
   labelValue: { fontWeight: '700', color: '#2D3319' },
   slider: { width: '100%', height: 36 },
   sliderEdges: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -4,
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: -4, marginBottom: 8,
   },
   edgeLabel: { fontSize: 10, color: '#A8B89F' },
   sliderActions: { flexDirection: 'row', gap: 8 },
   cancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D4DDD0',
-    borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
+    flex: 1, borderWidth: 1, borderColor: '#D4DDD0',
+    borderRadius: 8, paddingVertical: 7, alignItems: 'center',
   },
   cancelBtnText: { fontSize: 13, fontWeight: '600', color: '#6B7566' },
   applyBtn: {
-    flex: 2,
-    backgroundColor: '#6B7F5F',
-    borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
+    flex: 2, backgroundColor: '#6B7F5F', borderRadius: 8,
+    paddingVertical: 7, alignItems: 'center',
   },
   applyBtnDisabled: { backgroundColor: '#A8B89F' },
   applyBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
