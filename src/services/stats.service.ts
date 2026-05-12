@@ -5,6 +5,7 @@ import { getCached, setCached } from './cache.service';
 export interface WeekSummary {
   week_label: string;
   items_added: number;
+  items_wasted: number;
   waste_percent: number;
 }
 
@@ -63,6 +64,7 @@ export async function getWeeklyHistory(userId: string): Promise<WeekSummary[]> {
     weeks.push({
       week_label: i === 0 ? 'This week' : i === 1 ? 'Last week' : `${i} weeks ago`,
       items_added: added,
+      items_wasted: wasted,
       waste_percent: added > 0 ? Math.round((wasted / added) * 100) : 0,
     });
   }

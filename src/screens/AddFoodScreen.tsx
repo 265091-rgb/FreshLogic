@@ -12,7 +12,7 @@ import { lookupBarcode, defaultExpiryDate, mapCategory } from '../services/barco
 const CATEGORIES = ['dairy', 'produce', 'protein', 'grains', 'beverages', 'other'];
 const UNITS = ['count', 'oz', 'lbs', 'kg', 'g', 'gallon', 'L', 'ml', 'bag', 'box', 'can', 'bottle'];
 
-type Mode = 'choose' | 'scanning' | 'form';
+type Mode = 'choose' | 'scanning' | 'form' | 'voice';
 
 interface FormState {
   name: string;
@@ -34,6 +34,7 @@ export default function AddFoodScreen() {
   const [saving, setSaving] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [Scanner, setScanner] = useState<any>(null);
+  const [voiceText, setVoiceText] = useState('');
 
   // Dynamically load BarCodeScanner only on native
   useEffect(() => {
@@ -54,8 +55,29 @@ export default function AddFoodScreen() {
         setMode('form');
         navigation.setParams({ prefillName: undefined });
       }
-    }, [route.params?.prefillName])
+    }, [route.params?.prefillName, navigation])
   );
+
+  function handleVoiceSubmit() {
+    const text = voiceText.trim();
+    if (!text) return;
+    // Parse "2 lbs chicken" → { quantity: '2', unit: 'lbs', name: 'chicken' }
+    const unitList = ['oz', 'lbs', 'lb', 'kg', 'g', 'gallon', 'L', 'ml', 'bag', 'box', 'can', 'bottle'];
+    const re = new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*(${unitList.join('|')})?\\s+(.+)$`, 'i');
+    const match = text.match(re);
+    const parsed = match
+      ? { quantity: match[1], unit: match[2]?.toLowerCase().replace('lb', 'lbs') ?? 'count', name: match[3].trim() }
+      : { quantity: '1', unit: 'count', name: text };
+    setForm({
+      name: parsed.name,
+      category: 'other',
+      quantity: parsed.quantity,
+      unit: parsed.unit,
+      expiration_date: defaultExpiryDate('other'),
+    });
+    setVoiceText('');
+    setMode('form');
+  }
 
   async function requestCameraPermission() {
     if (Platform.OS === 'web') {
@@ -150,6 +172,55 @@ export default function AddFoodScreen() {
     );
   }
 
+  // ── Voice mode ─────────────────────────────────────────────
+  if (mode === 'voice') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <TouchableOpacity style={styles.voiceBackBtn} onPress={() => { setVoiceText(''); setMode('choose'); }}>
+          <Text style={styles.back}>← Back</Text>
+        </TouchableOpacity>
+
+        <View style={styles.voiceCenter}>
+          <View style={styles.micRing}>
+            <View style={styles.micBtn}>
+              <Text style={styles.micEmoji}>🎙</Text>
+            </View>
+          </View>
+          <Text style={styles.voiceTitle}>Voice Input</Text>
+          <Text style={styles.voiceSub}>Type naturally — quantity, unit, and item name:</Text>
+        </View>
+
+        <View style={styles.voiceInputSection}>
+          <TextInput
+            style={styles.voiceInput}
+            value={voiceText}
+            onChangeText={setVoiceText}
+            placeholder='e.g. "2 lbs chicken" or "3 apples"'
+            placeholderTextColor="#A8B89F"
+            autoCapitalize="none"
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleVoiceSubmit}
+          />
+          <TouchableOpacity
+            style={[styles.voiceSubmitBtn, !voiceText.trim() && styles.voiceSubmitDisabled]}
+            onPress={handleVoiceSubmit}
+            disabled={!voiceText.trim()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.voiceSubmitText}>Add Item →</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.voiceNote}>
+          <Text style={styles.voiceNoteText}>
+            🔌 Full hands-free voice input coming in Phase 3 via Raspberry Pi + Whisper.cpp
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ── Choose mode ────────────────────────────────────────────
   if (mode === 'choose') {
     return (
@@ -171,6 +242,17 @@ export default function AddFoodScreen() {
             <View>
               <Text style={styles.choiceSecondaryLabel}>Manual Entry</Text>
               <Text style={styles.choiceSecondaryHint}>Type item details yourself</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.choiceVoice} onPress={() => setMode('voice')} activeOpacity={0.85}>
+            <Text style={styles.choiceIcon}>🎙</Text>
+            <View>
+              <Text style={styles.choiceVoiceLabel}>Voice Input</Text>
+              <Text style={styles.choiceVoiceHint}>Speak or type naturally</Text>
+            </View>
+            <View style={styles.voiceBadge}>
+              <Text style={styles.voiceBadgeText}>Phase 3</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -286,6 +368,51 @@ const styles = StyleSheet.create({
   choiceSecondaryLabel: { fontSize: 17, fontWeight: '700', color: '#2D3319' },
   choiceSecondaryHint: { fontSize: 12, color: '#6B7566', marginTop: 2 },
   choiceIcon: { fontSize: 32 },
+  choiceVoice: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    backgroundColor: '#F8FAF7', borderRadius: 14, padding: 20,
+    borderWidth: 1, borderColor: '#D4DDD0',
+  },
+  choiceVoiceLabel: { fontSize: 17, fontWeight: '700', color: '#2D3319' },
+  choiceVoiceHint: { fontSize: 12, color: '#6B7566', marginTop: 2 },
+  voiceBadge: {
+    marginLeft: 'auto', backgroundColor: '#E8F0E6', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  voiceBadgeText: { fontSize: 10, fontWeight: '700', color: '#6B7F5F' },
+  // Voice mode
+  voiceBackBtn: { paddingHorizontal: 20, paddingTop: 20 },
+  voiceCenter: { alignItems: 'center', paddingTop: 40, paddingBottom: 32 },
+  micRing: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: '#E8F0E6', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20,
+  },
+  micBtn: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#6B7F5F', alignItems: 'center', justifyContent: 'center',
+  },
+  micEmoji: { fontSize: 32 },
+  voiceTitle: { fontSize: 22, fontWeight: '700', color: '#2D3319', marginBottom: 6 },
+  voiceSub: { fontSize: 14, color: '#6B7566', textAlign: 'center', paddingHorizontal: 32 },
+  voiceInputSection: { paddingHorizontal: 20, gap: 12 },
+  voiceInput: {
+    borderWidth: 1, borderColor: '#D4DDD0', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14, fontSize: 16,
+    color: '#2D3319', backgroundColor: '#fff',
+  },
+  voiceSubmitBtn: {
+    backgroundColor: '#6B7F5F', borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  voiceSubmitDisabled: { backgroundColor: '#A8B89F' },
+  voiceSubmitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  voiceNote: {
+    marginHorizontal: 20, marginTop: 24, padding: 14,
+    backgroundColor: '#F8FAF7', borderRadius: 10,
+    borderWidth: 1, borderColor: '#E8EDE6',
+  },
+  voiceNoteText: { fontSize: 12, color: '#6B7566', textAlign: 'center', lineHeight: 18 },
   // Scanner
   scanContainer: { flex: 1 },
   scanOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },

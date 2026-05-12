@@ -14,15 +14,12 @@ export interface GeneratedRecipe {
 }
 
 export async function generateRecipe(items: InventoryItem[]): Promise<GeneratedRecipe> {
-  const list = items
-    .filter((i) => i.quantity > 0)
-    .slice(0, 15)
-    .map((i) => `${i.name} (${i.quantity} ${i.unit})`)
-    .join(', ');
+  const available = items.filter((i) => i.quantity > 0).slice(0, 15);
+  const list = available.map((i) => `${i.name} (${i.quantity} ${i.unit})`).join(', ');
 
   const prompt =
     `You are a helpful cooking assistant. I have these ingredients: ${list}. ` +
-    `Suggest ONE recipe I can make. ` +
+    `Suggest ONE recipe I can make primarily from these ingredients. ` +
     `Respond ONLY with valid JSON matching this exact schema — no extra text: ` +
     `{"name":"string","meal_type":"breakfast|lunch|dinner|snack","cook_time":30,"servings":4,` +
     `"ingredients":[{"name":"string","quantity":1,"unit":"string","in_inventory":true}],` +
@@ -36,8 +33,26 @@ export async function generateRecipe(items: InventoryItem[]): Promise<GeneratedR
 
   if (!res.ok) throw new Error(`Ollama returned ${res.status}. Is it running?`);
   const data = await res.json();
-  const parsed = JSON.parse(data.response) as GeneratedRecipe;
+  let parsed: GeneratedRecipe;
+  try {
+    parsed = JSON.parse(data.response) as GeneratedRecipe;
+  } catch {
+    throw new Error('Model returned an invalid response. Try again.');
+  }
   if (!parsed.name) throw new Error('Model returned an empty recipe. Try again.');
+
+  // Cross-reference generated ingredients against actual inventory so the
+  // in_inventory flag reflects reality, not the model's guess.
+  if (parsed.ingredients) {
+    const inventoryNames = available.map((i) => i.name.toLowerCase());
+    parsed.ingredients = parsed.ingredients.map((ing) => ({
+      ...ing,
+      in_inventory: inventoryNames.some(
+        (n) => n.includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(n),
+      ),
+    }));
+  }
+
   return parsed;
 }
 

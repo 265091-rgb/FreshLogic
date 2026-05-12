@@ -56,6 +56,8 @@ function RecipeCard({
   );
 }
 
+type Filter = 'all' | 'favorites';
+
 export default function RecipesScreen() {
   const { supabaseUser } = useAuth();
   const navigation = useNavigation<any>();
@@ -65,6 +67,7 @@ export default function RecipesScreen() {
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
   const [draft, setDraft] = useState<GeneratedRecipe | null>(null);
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const load = useCallback(async () => {
     if (!supabaseUser) return;
@@ -142,6 +145,9 @@ export default function RecipesScreen() {
     ]);
   }
 
+  const favCount = recipes.filter((r) => r.favorite).length;
+  const displayed = filter === 'favorites' ? recipes.filter((r) => r.favorite) : recipes;
+
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8B9D83" /></View>;
   }
@@ -206,14 +212,38 @@ export default function RecipesScreen() {
         </View>
       )}
 
+      {/* Filter tab bar */}
+      <View style={styles.filterBar}>
+        <TouchableOpacity
+          style={[styles.filterPill, filter === 'all' && styles.filterPillActive]}
+          onPress={() => setFilter('all')}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.filterPillText, filter === 'all' && styles.filterPillTextActive]}>
+            All {recipes.length > 0 ? `(${recipes.length})` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterPill, filter === 'favorites' && styles.filterPillActive]}
+          onPress={() => setFilter('favorites')}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.filterPillText, filter === 'favorites' && styles.filterPillTextActive]}>
+            ⭐ Favorites {favCount > 0 ? `(${favCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Saved recipes list */}
       <FlatList
-        data={recipes}
+        data={displayed}
         keyExtractor={(r) => r.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          recipes.length > 0 ? (
-            <Text style={styles.sectionLabel}>SAVED RECIPES ({recipes.length})</Text>
+          displayed.length > 0 ? (
+            <Text style={styles.sectionLabel}>
+              {filter === 'favorites' ? `FAVORITES (${favCount})` : `SAVED RECIPES (${recipes.length})`}
+            </Text>
           ) : null
         }
         renderItem={({ item }) => (
@@ -226,9 +256,15 @@ export default function RecipesScreen() {
         ListEmptyComponent={
           !draft ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🍳</Text>
-              <Text style={styles.emptyTitle}>No saved recipes yet</Text>
-              <Text style={styles.emptySub}>Tap the button above and the AI will suggest something based on what's in your fridge.</Text>
+              <Text style={styles.emptyEmoji}>{filter === 'favorites' ? '⭐' : '🍳'}</Text>
+              <Text style={styles.emptyTitle}>
+                {filter === 'favorites' ? 'No favorites yet' : 'No saved recipes yet'}
+              </Text>
+              <Text style={styles.emptySub}>
+                {filter === 'favorites'
+                  ? 'Tap the ☆ on any recipe card to star it.'
+                  : 'Tap the button above and the AI will suggest something based on what\'s in your fridge.'}
+              </Text>
             </View>
           ) : null
         }
@@ -274,6 +310,19 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { backgroundColor: '#8B9D83' },
   saveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  filterBar: {
+    flexDirection: 'row', gap: 8,
+    paddingHorizontal: 20, paddingBottom: 12,
+  },
+  filterPill: {
+    flex: 1, paddingVertical: 8, borderRadius: 20, alignItems: 'center',
+    backgroundColor: '#F2F5F0', borderWidth: 1, borderColor: '#E8EDE6',
+  },
+  filterPillActive: {
+    backgroundColor: '#6B7F5F', borderColor: '#6B7F5F',
+  },
+  filterPillText: { fontSize: 13, fontWeight: '600', color: '#6B7566' },
+  filterPillTextActive: { color: '#fff' },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: '#6B7566', letterSpacing: 0.8,
     textTransform: 'uppercase', marginBottom: 10, marginTop: 4,

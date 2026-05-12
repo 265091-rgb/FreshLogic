@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import InventoryItem from '../components/InventoryItem';
 import { getInventory, updateItemQuantity, deleteItem } from '../services/inventory.service';
@@ -50,9 +51,9 @@ export default function FridgeScreen() {
     }
   }, [supabaseUser]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load().finally(() => setLoading(false));
-  }, [load]);
+  }, [load]));
 
   async function onRefresh() {
     setRefreshing(true);
@@ -96,20 +97,10 @@ export default function FridgeScreen() {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  async function handleUseHalf(item: Item) {
-    const newQty = Math.max(0, item.quantity / 2);
+  async function handleUse(item: Item, newQty: number) {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: newQty } : i)));
     try {
       await updateItemQuantity(item.id, newQty);
-    } catch {
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: item.quantity } : i)));
-    }
-  }
-
-  async function handleUseAll(item: Item) {
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: 0 } : i)));
-    try {
-      await updateItemQuantity(item.id, 0);
     } catch {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: item.quantity } : i)));
     }
@@ -198,8 +189,7 @@ export default function FridgeScreen() {
                       <InventoryItem
                         key={item.id}
                         item={item}
-                        onUseHalf={() => handleUseHalf(item)}
-                        onUseAll={() => handleUseAll(item)}
+                        onUse={(newQty) => handleUse(item, newQty)}
                         onDelete={() => handleDelete(item)}
                       />
                     ))

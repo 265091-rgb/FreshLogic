@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { InventoryItem as Item } from '../types';
 
 interface Props {
   item: Item;
-  onUseHalf: () => void;
-  onUseAll: () => void;
+  onUse: (newQty: number) => void;
   onDelete: () => void;
 }
 
@@ -30,12 +30,39 @@ function expiryColor(days: number | null): string {
   return '#6B7F5F';
 }
 
-export default React.memo(function InventoryItem({ item, onUseHalf, onUseAll, onDelete }: Props) {
+function sliderStep(qty: number): number {
+  if (qty <= 1) return 0.1;
+  if (qty <= 5) return 0.25;
+  return 0.5;
+}
+
+function fmt(n: number): string {
+  return Number(n.toFixed(2)).toString();
+}
+
+export default React.memo(function InventoryItem({ item, onUse, onDelete }: Props) {
+  const [expanded, setExpanded] = useState(false);
+  // Slider controls amount to USE (0 = use nothing, item.quantity = use all)
+  const [useAmount, setUseAmount] = useState(item.quantity / 2);
+
   const days = daysUntilExpiry(item.expiration_date);
   const color = expiryColor(days);
+  const remaining = Math.max(0, item.quantity - useAmount);
+  const step = sliderStep(item.quantity);
+
+  function handleOpen() {
+    setUseAmount(item.quantity / 2);
+    setExpanded(true);
+  }
+
+  function handleApply() {
+    onUse(Math.max(0, Math.round(remaining * 100) / 100));
+    setExpanded(false);
+  }
 
   return (
     <View style={styles.card}>
+      {/* Top row: name / qty / expiry */}
       <View style={styles.top}>
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
@@ -44,17 +71,64 @@ export default React.memo(function InventoryItem({ item, onUseHalf, onUseAll, on
         <Text style={[styles.expiry, { color }]}>{expiryLabel(days)}</Text>
       </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.btnHalf} onPress={onUseHalf} activeOpacity={0.8}>
-          <Text style={styles.btnHalfText}>Use Half</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnAll} onPress={onUseAll} activeOpacity={0.8}>
-          <Text style={styles.btnAllText}>Use All</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnDelete} onPress={onDelete} activeOpacity={0.8}>
-          <Text style={styles.btnDeleteText}>🗑</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Compact actions */}
+      {!expanded && (
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.useBtn} onPress={handleOpen} activeOpacity={0.8}>
+            <Text style={styles.useBtnText}>Use…</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnDelete} onPress={onDelete} activeOpacity={0.8}>
+            <Text style={styles.btnDeleteText}>🗑</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Expanded slider */}
+      {expanded && (
+        <View style={styles.sliderSection}>
+          <View style={styles.sliderLabels}>
+            <Text style={styles.labelUsing}>
+              Using <Text style={styles.labelValue}>{fmt(useAmount)} {item.unit}</Text>
+            </Text>
+            <Text style={styles.labelLeft}>
+              Left <Text style={styles.labelValue}>{fmt(remaining)} {item.unit}</Text>
+            </Text>
+          </View>
+
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={item.quantity}
+            value={useAmount}
+            step={step}
+            onValueChange={setUseAmount}
+            minimumTrackTintColor="#6B7F5F"
+            maximumTrackTintColor="#E8EDE6"
+            thumbTintColor="#6B7F5F"
+          />
+
+          <View style={styles.sliderEdges}>
+            <Text style={styles.edgeLabel}>0</Text>
+            <Text style={styles.edgeLabel}>{fmt(item.quantity)} {item.unit}</Text>
+          </View>
+
+          <View style={styles.sliderActions}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setExpanded(false)} activeOpacity={0.8}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.applyBtn, useAmount === 0 && styles.applyBtnDisabled]}
+              onPress={handleApply}
+              disabled={useAmount === 0}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.applyBtnText}>
+                {useAmount >= item.quantity ? 'Use All' : 'Apply'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 });
@@ -74,54 +148,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 10,
   },
-  info: {
-    flex: 1,
-    marginRight: 12,
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2D3319',
-    marginBottom: 2,
-  },
-  qty: {
-    fontSize: 13,
-    color: '#6B7566',
-  },
-  expiry: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  btnHalf: {
-    flex: 1,
-    backgroundColor: '#F2F5F0',
-    borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D4DDD0',
-  },
-  btnHalfText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4A5D43',
-  },
-  btnAll: {
+  info: { flex: 1, marginRight: 12 },
+  name: { fontSize: 15, fontWeight: '700', color: '#2D3319', marginBottom: 2 },
+  qty: { fontSize: 13, color: '#6B7566' },
+  expiry: { fontSize: 12, fontWeight: '600' },
+  actions: { flexDirection: 'row', gap: 8 },
+  useBtn: {
     flex: 1,
     backgroundColor: '#6B7F5F',
     borderRadius: 8,
     paddingVertical: 7,
     alignItems: 'center',
   },
-  btnAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-  },
+  useBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   btnDelete: {
     width: 36,
     backgroundColor: '#FFF2F2',
@@ -131,7 +170,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F5D0CE',
   },
-  btnDeleteText: {
-    fontSize: 14,
+  btnDeleteText: { fontSize: 14 },
+  sliderSection: { gap: 4 },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
   },
+  labelUsing: { fontSize: 12, color: '#6B7566' },
+  labelLeft: { fontSize: 12, color: '#6B7566' },
+  labelValue: { fontWeight: '700', color: '#2D3319' },
+  slider: { width: '100%', height: 36 },
+  sliderEdges: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  edgeLabel: { fontSize: 10, color: '#A8B89F' },
+  sliderActions: { flexDirection: 'row', gap: 8 },
+  cancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#D4DDD0',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  cancelBtnText: { fontSize: 13, fontWeight: '600', color: '#6B7566' },
+  applyBtn: {
+    flex: 2,
+    backgroundColor: '#6B7F5F',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  applyBtnDisabled: { backgroundColor: '#A8B89F' },
+  applyBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 });
