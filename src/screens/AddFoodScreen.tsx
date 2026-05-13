@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Platform, ActivityIndicator, Alert, Vibration,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
@@ -12,6 +13,35 @@ import { lookupBarcode, defaultExpiryDate, mapCategory } from '../services/barco
 const CATEGORIES = ['dairy', 'produce', 'protein', 'grains', 'beverages', 'other'];
 const UNITS = ['count', 'oz', 'lbs', 'kg', 'g', 'gallon', 'L', 'ml', 'bag', 'box', 'can', 'bottle'];
 
+interface ServingSliderConfig {
+  max: number;
+  step: number;
+  label: (v: number) => string;
+}
+
+function getServingSliderConfig(unit: string): ServingSliderConfig | null {
+  switch (unit.toLowerCase()) {
+    case 'gallon':
+      return { max: 0.5, step: 0.0625, label: (v) => v === 0 ? 'None' : `${Math.round(v / 0.0625)} cup${Math.round(v / 0.0625) === 1 ? '' : 's'}` };
+    case 'l':
+      return { max: 1, step: 0.25, label: (v) => v === 0 ? 'None' : `${Math.round(v / 0.25)} cup${Math.round(v / 0.25) === 1 ? '' : 's'} (${v} L)` };
+    case 'oz':
+      return { max: 16, step: 1, label: (v) => v === 0 ? 'None' : `${v} fl oz` };
+    case 'ml':
+      return { max: 500, step: 50, label: (v) => v === 0 ? 'None' : `${v} ml` };
+    case 'count':
+      return { max: 6, step: 1, label: (v) => v === 0 ? 'None' : `${v} each` };
+    case 'lbs':
+      return { max: 2, step: 0.25, label: (v) => v === 0 ? 'None' : `${v} lbs` };
+    case 'kg':
+      return { max: 1, step: 0.1, label: (v) => v === 0 ? 'None' : `${parseFloat(v.toFixed(1))} kg` };
+    case 'g':
+      return { max: 200, step: 10, label: (v) => v === 0 ? 'None' : `${v} g` };
+    default:
+      return null;
+  }
+}
+
 type Mode = 'choose' | 'scanning' | 'form' | 'voice';
 
 interface FormState {
@@ -20,51 +50,8 @@ interface FormState {
   quantity: string;
   unit: string;
   expiration_date: string;
-  serving_size: string; // numeric string in the item's unit; '' = none
+  serving_size: number; // 0 = none
 }
-
-// Serving size suggestions per unit — values are in the item's unit
-const SERVING_SUGGESTIONS: Record<string, Array<{ label: string; value: number }>> = {
-  gallon: [
-    { label: '1 cup', value: 0.0625 },
-    { label: '2 cups', value: 0.125 },
-    { label: 'Half gal', value: 0.5 },
-  ],
-  L: [
-    { label: '1 cup (250 ml)', value: 0.25 },
-    { label: '500 ml', value: 0.5 },
-  ],
-  oz: [
-    { label: '1 fl oz', value: 1 },
-    { label: '4 fl oz (½ cup)', value: 4 },
-    { label: '8 fl oz (1 cup)', value: 8 },
-  ],
-  ml: [
-    { label: '50 ml', value: 50 },
-    { label: '100 ml', value: 100 },
-    { label: '250 ml (1 cup)', value: 250 },
-  ],
-  count: [
-    { label: '1 each', value: 1 },
-    { label: '2 each', value: 2 },
-    { label: '3 each', value: 3 },
-  ],
-  lbs: [
-    { label: '¼ lb', value: 0.25 },
-    { label: '½ lb', value: 0.5 },
-    { label: '1 lb', value: 1 },
-  ],
-  kg: [
-    { label: '100 g', value: 0.1 },
-    { label: '250 g', value: 0.25 },
-    { label: '500 g', value: 0.5 },
-  ],
-  g: [
-    { label: '30 g (1 oz)', value: 30 },
-    { label: '50 g', value: 50 },
-    { label: '100 g', value: 100 },
-  ],
-};
 
 export default function AddFoodScreen() {
   const { supabaseUser } = useAuth();
@@ -72,7 +59,7 @@ export default function AddFoodScreen() {
   const route = useRoute<any>();
   const [mode, setMode] = useState<Mode>('choose');
   const [form, setForm] = useState<FormState>({
-    name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: '', serving_size: '',
+    name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: '', serving_size: 0,
   });
   const [lookingUp, setLookingUp] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -95,7 +82,7 @@ export default function AddFoodScreen() {
     useCallback(() => {
       const prefillName = route.params?.prefillName as string | undefined;
       if (prefillName) {
-        setForm({ name: prefillName, category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other'), serving_size: '' });
+        setForm({ name: prefillName, category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other'), serving_size: 0 });
         setMode('form');
         navigation.setParams({ prefillName: undefined });
       }
@@ -118,6 +105,7 @@ export default function AddFoodScreen() {
       quantity: parsed.quantity,
       unit: parsed.unit,
       expiration_date: defaultExpiryDate('other'),
+      serving_size: 0,
     });
     setVoiceText('');
     setMode('form');
@@ -158,7 +146,7 @@ export default function AddFoodScreen() {
         quantity: '1',
         unit: 'count',
         expiration_date: defaultExpiryDate(result.category),
-        serving_size: '',
+        serving_size: 0,
       });
     } else {
       setForm((f) => ({ ...f, name: '', expiration_date: defaultExpiryDate('other') }));
@@ -168,7 +156,7 @@ export default function AddFoodScreen() {
   }
 
   function handleManualPress() {
-    setForm({ name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other'), serving_size: '' });
+    setForm({ name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other'), serving_size: 0 });
     setMode('form');
   }
 
@@ -179,7 +167,6 @@ export default function AddFoodScreen() {
 
     setSaving(true);
     try {
-      const servingNum = parseFloat(form.serving_size);
       await addItem({
         user_id: supabaseUser.id,
         name: form.name.trim(),
@@ -187,7 +174,7 @@ export default function AddFoodScreen() {
         quantity: parseFloat(form.quantity),
         unit: form.unit,
         expiration_date: form.expiration_date || undefined,
-        serving_size: !isNaN(servingNum) && servingNum > 0 ? servingNum : undefined,
+        serving_size: form.serving_size > 0 ? form.serving_size : undefined,
       });
       Alert.alert('Added!', `${form.name} added to your fridge.`, [
         { text: 'Add Another', onPress: () => setMode('choose') },
@@ -369,7 +356,7 @@ export default function AddFoodScreen() {
                 <TouchableOpacity
                   key={u}
                   style={[styles.pill, form.unit === u && styles.pillActive]}
-                  onPress={() => setForm((f) => ({ ...f, unit: u }))}
+                  onPress={() => setForm((f) => ({ ...f, unit: u, serving_size: 0 }))}
                 >
                   <Text style={[styles.pillText, form.unit === u && styles.pillTextActive]}>{u}</Text>
                 </TouchableOpacity>
@@ -390,39 +377,41 @@ export default function AddFoodScreen() {
 
         <Text style={styles.label}>Serving Size <Text style={styles.labelOptional}>(optional)</Text></Text>
         <Text style={styles.servingHint}>
-          How much counts as one serving? The fridge slider will snap to this increment.
+          Slide to set how much counts as one use. The fridge slider will snap to this increment.
         </Text>
-        {/* Quick suggestion pills */}
-        {SERVING_SUGGESTIONS[form.unit] && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pills}>
-            <TouchableOpacity
-              style={[styles.pill, form.serving_size === '' && styles.pillActive]}
-              onPress={() => setForm((f) => ({ ...f, serving_size: '' }))}
-            >
-              <Text style={[styles.pillText, form.serving_size === '' && styles.pillTextActive]}>None</Text>
-            </TouchableOpacity>
-            {SERVING_SUGGESTIONS[form.unit].map((s) => (
-              <TouchableOpacity
-                key={s.label}
-                style={[styles.pill, form.serving_size === String(s.value) && styles.pillActive]}
-                onPress={() => setForm((f) => ({ ...f, serving_size: String(s.value) }))}
-              >
-                <Text style={[styles.pillText, form.serving_size === String(s.value) && styles.pillTextActive]}>
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-        {/* Manual override input */}
-        <TextInput
-          style={styles.input}
-          value={form.serving_size}
-          onChangeText={(v) => setForm((f) => ({ ...f, serving_size: v }))}
-          placeholder={`Custom amount in ${form.unit}`}
-          placeholderTextColor="#A8B89F"
-          keyboardType="decimal-pad"
-        />
+        {(() => {
+          const cfg = getServingSliderConfig(form.unit);
+          if (!cfg) return (
+            <TextInput
+              style={styles.input}
+              value={form.serving_size > 0 ? String(form.serving_size) : ''}
+              onChangeText={(v) => setForm((f) => ({ ...f, serving_size: parseFloat(v) || 0 }))}
+              placeholder={`Amount in ${form.unit}`}
+              placeholderTextColor="#A8B89F"
+              keyboardType="decimal-pad"
+            />
+          );
+          return (
+            <View style={styles.servingSliderBox}>
+              <Text style={styles.servingValue}>{cfg.label(form.serving_size)}</Text>
+              <Slider
+                style={styles.servingSlider}
+                minimumValue={0}
+                maximumValue={cfg.max}
+                value={form.serving_size}
+                step={cfg.step}
+                onValueChange={(v) => setForm((f) => ({ ...f, serving_size: v }))}
+                minimumTrackTintColor="#6B7F5F"
+                maximumTrackTintColor="#E8EDE6"
+                thumbTintColor="#6B7F5F"
+              />
+              <View style={styles.servingEdges}>
+                <Text style={styles.edgeLabel}>None</Text>
+                <Text style={styles.edgeLabel}>{cfg.label(cfg.max)}</Text>
+              </View>
+            </View>
+          );
+        })()}
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Add to Fridge</Text>}
@@ -515,6 +504,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: '#6B7566', marginBottom: 6, marginTop: 16 },
   labelOptional: { fontSize: 11, fontWeight: '400', color: '#A8B89F' },
   servingHint: { fontSize: 12, color: '#A8B89F', marginBottom: 8, marginTop: -4 },
+  servingSliderBox: { backgroundColor: '#F2F5F0', borderRadius: 10, padding: 12, marginTop: 4 },
+  servingValue: { fontSize: 15, fontWeight: '700', color: '#2D3319', textAlign: 'center', marginBottom: 4 },
+  servingSlider: { width: '100%', height: 36 },
+  servingEdges: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
+  edgeLabel: { fontSize: 10, color: '#A8B89F' },
   input: {
     borderWidth: 1, borderColor: '#D4DDD0', borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: '#2D3319',
