@@ -18,12 +18,25 @@ export async function generateRecipe(items: InventoryItem[]): Promise<GeneratedR
   const list = available.map((i) => `${i.name} (${i.quantity} ${i.unit})`).join(', ');
 
   const prompt =
-    `You are a helpful cooking assistant. I have these ingredients: ${list}. ` +
-    `Suggest ONE recipe I can make primarily from these ingredients. ` +
-    `Respond ONLY with valid JSON matching this exact schema — no extra text: ` +
+    `You are an expert home cook writing a recipe for a cookbook. ` +
+    `I have these ingredients: ${list}. ` +
+    `Create ONE complete, realistic recipe using primarily these ingredients. ` +
+    `\n\nINGREDIENT RULES: ` +
+    `Include every ingredient with a specific real-world quantity and unit. ` +
+    `Always include pantry staples needed (olive oil, butter, salt, black pepper, garlic, onion, spices). ` +
+    `Use units like "tbsp", "tsp", "cups", "oz", "cloves", "pinch". ` +
+    `\n\nINSTRUCTION RULES — THIS IS CRITICAL: ` +
+    `Write EXACTLY 6 to 10 steps depending on recipe complexity. ` +
+    `EACH step must be 1 to 3 full sentences long. ` +
+    `EACH step must include: the specific action, exact quantities, exact heat level or temperature, ` +
+    `exact time in minutes, and a visual or sensory cue for when it is done. ` +
+    `NEVER write a vague step. ` +
+    `BAD example (never do this): "Cook the chicken until done." ` +
+    `GOOD example (always do this): "Season the chicken breasts on both sides with 1 teaspoon of salt and 1/2 teaspoon of black pepper. Heat 2 tablespoons of olive oil in a large skillet over medium-high heat until the oil shimmers. Add the chicken and cook undisturbed for 6 to 7 minutes per side until golden brown and the internal temperature reaches 165°F." ` +
+    `\n\nRespond ONLY with valid JSON — no extra text, no markdown, no explanation: ` +
     `{"name":"string","meal_type":"breakfast|lunch|dinner|snack","cook_time":30,"servings":4,` +
-    `"ingredients":[{"name":"string","quantity":1,"unit":"string","in_inventory":true}],` +
-    `"instructions":["string"]}`;
+    `"ingredients":[{"name":"string","quantity":1.0,"unit":"string","in_inventory":true}],` +
+    `"instructions":["Full detailed step 1 with time, temp, and cue.","Full detailed step 2."]}`;
 
   const res = await fetch(`${OLLAMA_BASE}/api/generate`, {
     method: 'POST',

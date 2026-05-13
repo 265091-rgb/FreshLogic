@@ -11,6 +11,7 @@ import {
   generateRecipe, saveRecipe, getRecipes, toggleFavorite, deleteRecipe,
   GeneratedRecipe,
 } from '../services/recipe.service';
+import { getRecipeMatches, RecipeMatch } from '../services/recipe-matcher.service';
 import { Recipe } from '../types';
 
 const MEAL_EMOJI: Record<string, string> = {
@@ -56,7 +57,7 @@ function RecipeCard({
   );
 }
 
-type Filter = 'all' | 'favorites';
+type Filter = 'all' | 'favorites' | 'matches';
 
 export default function RecipesScreen() {
   const { supabaseUser } = useAuth();
@@ -68,6 +69,8 @@ export default function RecipesScreen() {
   const [draft, setDraft] = useState<GeneratedRecipe | null>(null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [matches, setMatches] = useState<RecipeMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!supabaseUser) return;
@@ -77,6 +80,14 @@ export default function RecipesScreen() {
   }, [supabaseUser]);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
+
+  useEffect(() => {
+    if (filter !== 'matches' || !supabaseUser) return;
+    setMatchesLoading(true);
+    getRecipeMatches(supabaseUser.id)
+      .then(setMatches)
+      .finally(() => setMatchesLoading(false));
+  }, [filter, supabaseUser]);
 
   async function handleGenerate() {
     if (!supabaseUser) return;
@@ -147,6 +158,7 @@ export default function RecipesScreen() {
 
   const favCount = recipes.filter((r) => r.favorite).length;
   const displayed = filter === 'favorites' ? recipes.filter((r) => r.favorite) : recipes;
+  const displayedMatches = matches;
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8B9D83" /></View>;
@@ -229,46 +241,107 @@ export default function RecipesScreen() {
           activeOpacity={0.75}
         >
           <Text style={[styles.filterPillText, filter === 'favorites' && styles.filterPillTextActive]}>
-            ⭐ Favorites {favCount > 0 ? `(${favCount})` : ''}
+            ⭐ {favCount > 0 ? `(${favCount})` : 'Favs'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterPill, filter === 'matches' && styles.filterPillActive]}
+          onPress={() => setFilter('matches')}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.filterPillText, filter === 'matches' && styles.filterPillTextActive]}>
+            🥗 Fridge
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Saved recipes list */}
-      <FlatList
-        data={displayed}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          displayed.length > 0 ? (
-            <Text style={styles.sectionLabel}>
-              {filter === 'favorites' ? `FAVORITES (${favCount})` : `SAVED RECIPES (${recipes.length})`}
-            </Text>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <RecipeCard
-            recipe={item}
-            onPress={() => navigation.navigate('RecipeDetail', { recipe: item })}
-            onToggleFav={() => handleToggleFav(item)}
+      {/* Fridge matches view */}
+      {filter === 'matches' && (
+        matchesLoading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color="#8B9D83" /></View>
+        ) : (
+          <FlatList
+            data={displayedMatches}
+            keyExtractor={(m) => m.recipe.id}
+            contentContainerStyle={styles.listContent}
+            ListHeaderComponent={
+              displayedMatches.length > 0 ? (
+                <Text style={styles.sectionLabel}>MATCHES YOUR FRIDGE ({displayedMatches.length})</Text>
+              ) : null
+            }
+            renderItem={({ item: m }) => (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => navigation.navigate('RecipeDetail', { recipe: m.recipe })}
+                activeOpacity={0.85}
+              >
+                <View style={styles.cardLeft}>
+                  <Text style={styles.cardEmoji}>{MEAL_EMOJI[m.recipe.meal_type ?? ''] ?? '👨‍🍳'}</Text>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName} numberOfLines={1}>{m.recipe.name}</Text>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                      {m.matchedIngredients.slice(0, 3).join(', ')}
+                      {m.matchedIngredients.length > 3 ? ` +${m.matchedIngredients.length - 3} more` : ''}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.matchBadge, m.matchPercent >= 0.8 && styles.matchBadgeHigh]}>
+                  <Text style={styles.matchBadgeText}>
+                    {m.matchCount}/{m.totalIngredients}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>🥗</Text>
+                <Text style={styles.emptyTitle}>No matches yet</Text>
+                <Text style={styles.emptySub}>
+                  Save some AI-generated recipes first, then add items to your fridge — matches will appear here.
+                </Text>
+              </View>
+            }
           />
-        )}
-        ListEmptyComponent={
-          !draft ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>{filter === 'favorites' ? '⭐' : '🍳'}</Text>
-              <Text style={styles.emptyTitle}>
-                {filter === 'favorites' ? 'No favorites yet' : 'No saved recipes yet'}
+        )
+      )}
+
+      {/* Saved recipes list */}
+      {filter !== 'matches' && (
+        <FlatList
+          data={displayed}
+          keyExtractor={(r) => r.id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            displayed.length > 0 ? (
+              <Text style={styles.sectionLabel}>
+                {filter === 'favorites' ? `FAVORITES (${favCount})` : `SAVED RECIPES (${recipes.length})`}
               </Text>
-              <Text style={styles.emptySub}>
-                {filter === 'favorites'
-                  ? 'Tap the ☆ on any recipe card to star it.'
-                  : 'Tap the button above and the AI will suggest something based on what\'s in your fridge.'}
-              </Text>
-            </View>
-          ) : null
-        }
-      />
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <RecipeCard
+              recipe={item}
+              onPress={() => navigation.navigate('RecipeDetail', { recipe: item })}
+              onToggleFav={() => handleToggleFav(item)}
+            />
+          )}
+          ListEmptyComponent={
+            !draft ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>{filter === 'favorites' ? '⭐' : '🍳'}</Text>
+                <Text style={styles.emptyTitle}>
+                  {filter === 'favorites' ? 'No favorites yet' : 'No saved recipes yet'}
+                </Text>
+                <Text style={styles.emptySub}>
+                  {filter === 'favorites'
+                    ? 'Tap the ☆ on any recipe card to star it.'
+                    : 'Tap the button above and the AI will suggest something based on what\'s in your fridge.'}
+                </Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -339,6 +412,12 @@ const styles = StyleSheet.create({
   cardName: { fontSize: 15, fontWeight: '700', color: '#2D3319', marginBottom: 3 },
   cardMeta: { fontSize: 12, color: '#6B7566' },
   star: { fontSize: 22 },
+  matchBadge: {
+    backgroundColor: '#E8F0E6', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 4, minWidth: 36, alignItems: 'center',
+  },
+  matchBadgeHigh: { backgroundColor: '#6B7F5F' },
+  matchBadgeText: { fontSize: 11, fontWeight: '700', color: '#4A5D43' },
   empty: { alignItems: 'center', paddingTop: 40 },
   emptyEmoji: { fontSize: 56, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#4A5D43', marginBottom: 6 },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Platform, ActivityIndicator, Alert, Vibration,
@@ -9,6 +9,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { useAuth } from '../hooks/useAuth';
 import { addItem } from '../services/inventory.service';
 import { lookupBarcode, defaultExpiryDate, mapCategory } from '../services/barcode.service';
+import { getExpiryDate, guessCategory } from '../services/expiration.service';
 
 const CATEGORIES = ['dairy', 'produce', 'protein', 'grains', 'beverages', 'other'];
 const UNITS = ['count', 'oz', 'lbs', 'kg', 'g', 'gallon', 'L', 'ml', 'bag', 'box', 'can', 'bottle'];
@@ -66,6 +67,8 @@ export default function AddFoodScreen() {
   const [scanned, setScanned] = useState(false);
   const [Scanner, setScanner] = useState<any>(null);
   const [voiceText, setVoiceText] = useState('');
+  const userEditedExpiry = useRef(false);
+  const nameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Dynamically load BarCodeScanner only on native
   useEffect(() => {
@@ -73,6 +76,21 @@ export default function AddFoodScreen() {
       import('expo-barcode-scanner').then((mod) => setScanner(() => mod.BarCodeScanner));
     }
   }, []);
+
+  // Auto-fill category + expiry when user types an item name.
+  useEffect(() => {
+    if (mode !== 'form') return;
+    const name = form.name.trim();
+    if (nameDebounce.current) clearTimeout(nameDebounce.current);
+    if (name.length < 3) return;
+    nameDebounce.current = setTimeout(async () => {
+      if (userEditedExpiry.current) return;
+      const cat = guessCategory(name);
+      const expiry = await getExpiryDate(cat);
+      setForm((f) => ({ ...f, category: cat, expiration_date: expiry }));
+    }, 500);
+    return () => { if (nameDebounce.current) clearTimeout(nameDebounce.current); };
+  }, [form.name, mode]);
 
   // Pre-fill from shopping list "Add to fridge" flow.
   // useFocusEffect fires every time this tab gains focus, which is what we
@@ -136,6 +154,7 @@ export default function AddFoodScreen() {
     setScanned(true);
     Vibration.vibrate(100);
     setLookingUp(true);
+    userEditedExpiry.current = false;
     setMode('form');
 
     const result = await lookupBarcode(data);
@@ -156,6 +175,7 @@ export default function AddFoodScreen() {
   }
 
   function handleManualPress() {
+    userEditedExpiry.current = false;
     setForm({ name: '', category: 'other', quantity: '1', unit: 'count', expiration_date: defaultExpiryDate('other'), serving_size: 0 });
     setMode('form');
   }
@@ -369,7 +389,7 @@ export default function AddFoodScreen() {
         <TextInput
           style={styles.input}
           value={form.expiration_date}
-          onChangeText={(v) => setForm((f) => ({ ...f, expiration_date: v }))}
+          onChangeText={(v) => { userEditedExpiry.current = true; setForm((f) => ({ ...f, expiration_date: v })); }}
           placeholder="2026-05-20"
           placeholderTextColor="#A8B89F"
           keyboardType="numeric"
