@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { InventoryItem as Item } from '../types';
+import { Colors, Radius, Shadow } from '../theme';
 
 interface Props {
   item: Item;
@@ -246,8 +247,10 @@ export default React.memo(function InventoryItem({ item, onUse, onDelete }: Prop
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: '#E8EDE6',
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: '#E3EAE0',
+    shadowColor: '#2D3319', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
   top: {
     flexDirection: 'row', justifyContent: 'space-between',

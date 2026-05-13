@@ -3,16 +3,20 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
-import { getInventory } from '../services/inventory.service';
+import {
+  getInventory, updateItemQuantity, deleteItem, addItem,
+} from '../services/inventory.service';
 import {
   generateRecipe, saveRecipe, getRecipes, toggleFavorite, deleteRecipe,
   GeneratedRecipe,
 } from '../services/recipe.service';
 import { getRecipeMatches, RecipeMatch } from '../services/recipe-matcher.service';
-import { Recipe } from '../types';
+import { addItem as addShoppingItem } from '../services/shoppingList.service';
+import { InventoryItem, Recipe } from '../types';
 
 const MEAL_EMOJI: Record<string, string> = {
   breakfast: '🍳',
@@ -32,28 +36,51 @@ function RecipeCard({
   recipe,
   onPress,
   onToggleFav,
+  onMakeIt,
+  onSkipIt,
+  isMaking,
 }: {
   recipe: Recipe;
   onPress: () => void;
   onToggleFav: () => void;
+  onMakeIt: () => void;
+  onSkipIt: () => void;
+  isMaking: boolean;
 }) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.cardLeft}>
-        <Text style={styles.cardEmoji}>{MEAL_EMOJI[recipe.meal_type ?? ''] ?? '👨‍🍳'}</Text>
-        <View style={styles.cardInfo}>
-          <Text style={styles.cardName} numberOfLines={1}>{recipe.name}</Text>
-          <Text style={styles.cardMeta}>
-            {recipe.cook_time ? `🕒 ${recipe.cook_time} min` : ''}
-            {recipe.cook_time && recipe.servings ? '  ·  ' : ''}
-            {recipe.servings ? `🍽 ${recipe.servings} servings` : ''}
-          </Text>
+    <View style={styles.card}>
+      <TouchableOpacity style={styles.cardTop} onPress={onPress} activeOpacity={0.75}>
+        <View style={styles.cardLeft}>
+          <Text style={styles.cardEmoji}>{MEAL_EMOJI[recipe.meal_type ?? ''] ?? '👨‍🍳'}</Text>
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardName} numberOfLines={1}>{recipe.name}</Text>
+            <Text style={styles.cardMeta}>
+              {recipe.cook_time ? `🕒 ${recipe.cook_time} min` : ''}
+              {recipe.cook_time && recipe.servings ? '  ·  ' : ''}
+              {recipe.servings ? `🍽 ${recipe.servings} servings` : ''}
+            </Text>
+          </View>
         </View>
-      </View>
-      <TouchableOpacity onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={styles.star}>{recipe.favorite ? '⭐' : '☆'}</Text>
+        <TouchableOpacity onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.star}>{recipe.favorite ? '⭐' : '☆'}</Text>
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
+      <View style={styles.cardButtons}>
+        <TouchableOpacity
+          style={[styles.makeItBtn, isMaking && styles.makeItBtnDisabled]}
+          onPress={onMakeIt}
+          disabled={isMaking}
+          activeOpacity={0.85}
+        >
+          {isMaking
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.makeItBtnText}>🍳 Make It</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.skipItBtn} onPress={onSkipIt} activeOpacity={0.75}>
+          <Text style={styles.skipItBtnText}>Skip It</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -67,10 +94,14 @@ export default function RecipesScreen() {
   const [generating, setGenerating] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
   const [draft, setDraft] = useState<GeneratedRecipe | null>(null);
-  const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [matches, setMatches] = useState<RecipeMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
+  const [leftoverMode, setLeftoverMode] = useState(false);
+  const [leftoverServings, setLeftoverServings] = useState(0);
+  const [making, setMaking] = useState(false);
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  const [makingRecipeId, setMakingRecipeId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabaseUser) return;
@@ -88,6 +119,111 @@ export default function RecipesScreen() {
       .then(setMatches)
       .finally(() => setMatchesLoading(false));
   }, [filter, supabaseUser]);
+
+  async function deductIngredients(
+    recipeIngredients: NonNullable<GeneratedRecipe['ingredients']>,
+    inventory: InventoryItem[],
+  ) {
+    const entries = inventory.map((i) => ({ item: i, key: i.name.toLowerCase() }));
+    const used = new Set<string>();
+
+    for (const ing of recipeIngredients) {
+      if (!ing.in_inventory) continue;
+      const needle = ing.name.toLowerCase();
+      const match = entries.find(
+        ({ key, item }) => !used.has(item.id) && (key.includes(needle) || needle.includes(key)),
+      );
+      if (!match) continue;
+      used.add(match.item.id);
+      const newQty = match.item.unit.toLowerCase() === ing.unit.toLowerCase()
+        ? Math.max(0, match.item.quantity - ing.quantity)
+        : 0;
+      if (newQty <= 0) {
+        await deleteItem(match.item.id);
+      } else {
+        await updateItemQuantity(match.item.id, Math.round(newQty * 1000) / 1000);
+      }
+    }
+  }
+
+  function handleMakeItPress() {
+    setLeftoverServings(0);
+    setLeftoverMode(true);
+  }
+
+  async function handleConfirmMake() {
+    if (!supabaseUser || !draft) return;
+    setMaking(true);
+    try {
+      const [saved, inventory] = await Promise.all([
+        saveRecipe(supabaseUser.id, draft),
+        getInventory(supabaseUser.id),
+      ]);
+      setRecipes((prev) => [saved, ...prev]);
+
+      if (draft.ingredients) await deductIngredients(draft.ingredients, inventory);
+
+      if (leftoverServings > 0) {
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + 4);
+        await addItem({
+          user_id: supabaseUser.id,
+          name: `${draft.name} (leftover)`,
+          category: 'other',
+          quantity: leftoverServings,
+          unit: 'servings',
+          expiration_date: expiry.toISOString().split('T')[0],
+        });
+      }
+
+      setDraft(null);
+      setLeftoverMode(false);
+      Alert.alert(
+        'Enjoy your meal!',
+        leftoverServings > 0
+          ? `${leftoverServings} serving${leftoverServings !== 1 ? 's' : ''} saved to your fridge.`
+          : 'Ingredients removed from your fridge.',
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Something went wrong.');
+    } finally {
+      setMaking(false);
+    }
+  }
+
+  async function handleMakeIt(recipe: Recipe) {
+    if (!supabaseUser) return;
+    setMakingRecipeId(recipe.id);
+    try {
+      const ingredients = recipe.ingredients ?? [];
+      if (ingredients.length === 0) {
+        Alert.alert("You have everything you need — let's cook! 🍳");
+        return;
+      }
+      const inventory = await getInventory(supabaseUser.id);
+      const inventoryNames = inventory
+        .filter((i) => i.quantity > 0)
+        .map((i) => i.name.toLowerCase());
+      const missing = ingredients.filter((ing) => {
+        const needle = ing.name.toLowerCase();
+        return !inventoryNames.some((n) => n.includes(needle) || needle.includes(n));
+      });
+      if (missing.length === 0) {
+        Alert.alert("You have everything you need — let's cook! 🍳");
+        return;
+      }
+      await Promise.all(missing.map((ing) => addShoppingItem(supabaseUser.id, ing.name)));
+      navigation.navigate('List');
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not add to shopping list.');
+    } finally {
+      setMakingRecipeId(null);
+    }
+  }
+
+  function handleSkipIt(recipeId: string) {
+    setSkippedIds((prev) => new Set([...prev, recipeId]));
+  }
 
   async function handleGenerate() {
     if (!supabaseUser) return;
@@ -120,20 +256,6 @@ export default function RecipesScreen() {
     }
   }
 
-  async function handleSaveDraft() {
-    if (!supabaseUser || !draft) return;
-    setSaving(true);
-    try {
-      const saved = await saveRecipe(supabaseUser.id, draft);
-      setRecipes((prev) => [saved, ...prev]);
-      setDraft(null);
-    } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Could not save recipe.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleToggleFav(recipe: Recipe) {
     const next = !recipe.favorite;
     setRecipes((prev) => prev.map((r) => (r.id === recipe.id ? { ...r, favorite: next } : r)));
@@ -157,8 +279,9 @@ export default function RecipesScreen() {
   }
 
   const favCount = recipes.filter((r) => r.favorite).length;
-  const displayed = filter === 'favorites' ? recipes.filter((r) => r.favorite) : recipes;
-  const displayedMatches = matches;
+  const displayed = (filter === 'favorites' ? recipes.filter((r) => r.favorite) : recipes)
+    .filter((r) => !skippedIds.has(r.id));
+  const displayedMatches = matches.filter((m) => !skippedIds.has(m.recipe.id));
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#8B9D83" /></View>;
@@ -192,12 +315,12 @@ export default function RecipesScreen() {
       {draft && (
         <View style={styles.draftCard}>
           <View style={styles.draftHeader}>
-            <Text style={styles.draftTag}>NEW</Text>
+            <Text style={styles.draftTag}>NEW RECIPE</Text>
             <Text style={styles.draftName} numberOfLines={2}>{draft.name}</Text>
             <Text style={styles.draftMeta}>
               {MEAL_EMOJI[draft.meal_type ?? ''] ?? '👨‍🍳'} {draft.meal_type ?? 'recipe'}
               {draft.cook_time ? `  ·  🕒 ${draft.cook_time} min` : ''}
-              {draft.servings ? `  ·  🍽 ${draft.servings}` : ''}
+              {draft.servings ? `  ·  🍽 ${draft.servings} servings` : ''}
             </Text>
           </View>
           {draft.ingredients && draft.ingredients.length > 0 && (
@@ -206,20 +329,58 @@ export default function RecipesScreen() {
               {draft.ingredients.length > 4 ? ` +${draft.ingredients.length - 4} more` : ''}
             </Text>
           )}
+          {leftoverMode && (
+            <View style={styles.leftoverBox}>
+              <Text style={styles.leftoverTitle}>Leftovers going back in the fridge?</Text>
+              <Text style={styles.leftoverValue}>
+                {leftoverServings === 0
+                  ? 'None — eating everything now'
+                  : `${leftoverServings} serving${leftoverServings !== 1 ? 's' : ''}`}
+              </Text>
+              <Slider
+                style={styles.leftoverSlider}
+                minimumValue={0}
+                maximumValue={draft.servings ?? 4}
+                step={1}
+                value={leftoverServings}
+                onValueChange={setLeftoverServings}
+                minimumTrackTintColor="#6B7F5F"
+                maximumTrackTintColor="#E8EDE6"
+                thumbTintColor="#6B7F5F"
+              />
+              <View style={styles.leftoverEdges}>
+                <Text style={styles.edgeLabel}>None</Text>
+                <Text style={styles.edgeLabel}>{draft.servings ?? 4} servings</Text>
+              </View>
+            </View>
+          )}
           <View style={styles.draftActions}>
-            <TouchableOpacity style={styles.discardBtn} onPress={() => setDraft(null)} activeOpacity={0.8}>
-              <Text style={styles.discardBtnText}>Discard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-              onPress={handleSaveDraft}
-              disabled={saving}
-              activeOpacity={0.85}
-            >
-              {saving
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.saveBtnText}>💾 Save Recipe</Text>}
-            </TouchableOpacity>
+            {!leftoverMode ? (
+              <>
+                <TouchableOpacity style={styles.discardBtn} onPress={() => setDraft(null)} activeOpacity={0.8}>
+                  <Text style={styles.discardBtnText}>Don't make it</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleMakeItPress} activeOpacity={0.85}>
+                  <Text style={styles.saveBtnText}>🍳 Make it</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.discardBtn} onPress={() => setLeftoverMode(false)} activeOpacity={0.8}>
+                  <Text style={styles.discardBtnText}>Back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveBtn, making && styles.saveBtnDisabled]}
+                  onPress={handleConfirmMake}
+                  disabled={making}
+                  activeOpacity={0.85}
+                >
+                  {making
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.saveBtnText}>Confirm & Cook</Text>}
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       )}
@@ -412,6 +573,14 @@ const styles = StyleSheet.create({
   cardName: { fontSize: 15, fontWeight: '700', color: '#2D3319', marginBottom: 3 },
   cardMeta: { fontSize: 12, color: '#6B7566' },
   star: { fontSize: 22 },
+  leftoverBox: {
+    backgroundColor: '#F2F5F0', borderRadius: 10, padding: 12, marginBottom: 12,
+  },
+  leftoverTitle: { fontSize: 13, fontWeight: '600', color: '#6B7566', marginBottom: 4 },
+  leftoverValue: { fontSize: 15, fontWeight: '700', color: '#2D3319', textAlign: 'center', marginBottom: 2 },
+  leftoverSlider: { width: '100%', height: 36 },
+  leftoverEdges: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
+  edgeLabel: { fontSize: 10, color: '#A8B89F' },
   matchBadge: {
     backgroundColor: '#E8F0E6', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 4, minWidth: 36, alignItems: 'center',

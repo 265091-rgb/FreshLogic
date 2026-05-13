@@ -1,20 +1,16 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
+  View, Text, TextInput, ScrollView, RefreshControl,
+  TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { Search } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
 import InventoryItem from '../components/InventoryItem';
 import { getInventory, updateItemQuantity, deleteItem } from '../services/inventory.service';
 import { InventoryItem as Item } from '../types';
+import { Colors, Radius, Shadow } from '../theme';
 
 function daysUntil(dateStr?: string): number {
   if (!dateStr) return 999;
@@ -25,8 +21,7 @@ function daysUntil(dateStr?: string): number {
 interface Section {
   key: 'soon' | 'week' | 'fresh';
   label: string;
-  emoji: string;
-  color: string;
+  accentColor: string;
   bg: string;
   items: Item[];
 }
@@ -46,9 +41,7 @@ export default function FridgeScreen() {
     try {
       const data = await getInventory(supabaseUser.id);
       setItems(data);
-    } catch {
-      // keep stale data
-    }
+    } catch { /* keep stale data */ }
   }, [supabaseUser]);
 
   useFocusEffect(useCallback(() => {
@@ -87,9 +80,9 @@ export default function FridgeScreen() {
     });
 
     return [
-      { key: 'soon', label: 'Expiring Soon', emoji: '🔴', color: '#D4635E', bg: '#FFF2F2', items: soon },
-      { key: 'week', label: 'This Week', emoji: '🟠', color: '#E89B6C', bg: '#FFF8F0', items: week },
-      { key: 'fresh', label: 'Good for a While', emoji: '🟢', color: '#6B7F5F', bg: '#F2F5F0', items: fresh },
+      { key: 'soon',  label: 'Expiring Soon',    accentColor: Colors.danger,  bg: Colors.dangerBg,  items: soon  },
+      { key: 'week',  label: 'This Week',         accentColor: Colors.warning, bg: Colors.warningBg, items: week  },
+      { key: 'fresh', label: 'Good for a While',  accentColor: Colors.primary, bg: Colors.glass,     items: fresh },
     ];
   }, [filtered]);
 
@@ -120,7 +113,7 @@ export default function FridgeScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#8B9D83" />
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
@@ -129,30 +122,36 @@ export default function FridgeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>🧊 {profile?.name ? `${profile.name}'s Fridge` : 'My Fridge'}</Text>
-        <Text style={styles.count}>{totalItems} item{totalItems !== 1 ? 's' : ''}</Text>
+        <Text style={styles.title}>
+          {profile?.name ? `${profile.name}'s Fridge` : 'My Fridge'}
+        </Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{totalItems}</Text>
+        </View>
       </View>
 
       {/* Search */}
       <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search items..."
-          placeholderTextColor="#A8B89F"
-          value={search}
-          onChangeText={onSearchChange}
-          clearButtonMode="while-editing"
-        />
+        <View style={styles.searchWrap}>
+          <Search color={Colors.muted} size={16} strokeWidth={1.75} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search items..."
+            placeholderTextColor={Colors.muted}
+            value={search}
+            onChangeText={onSearchChange}
+            clearButtonMode="while-editing"
+          />
+        </View>
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B9D83" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         {sections.every((s) => s.items.length === 0) ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🧊</Text>
             <Text style={styles.emptyTitle}>{debouncedSearch ? 'No results' : 'Your fridge is empty'}</Text>
             <Text style={styles.emptySub}>
               {debouncedSearch
@@ -161,39 +160,33 @@ export default function FridgeScreen() {
             </Text>
           </View>
         ) : (
-          sections.map((section) => (
+          sections.map((section) => section.items.length === 0 ? null : (
             <View key={section.key} style={styles.section}>
-              {/* Section header */}
               <TouchableOpacity
-                style={[styles.sectionHeader, { backgroundColor: section.bg }]}
+                style={styles.sectionHeader}
                 onPress={() => toggleSection(section.key)}
-                activeOpacity={0.8}
+                activeOpacity={0.75}
               >
                 <View style={styles.sectionLeft}>
-                  <Text style={styles.sectionEmoji}>{section.emoji}</Text>
-                  <Text style={[styles.sectionLabel, { color: section.color }]}>{section.label}</Text>
-                  <View style={[styles.badge, { backgroundColor: section.color }]}>
+                  <View style={[styles.sectionDot, { backgroundColor: section.accentColor }]} />
+                  <Text style={[styles.sectionLabel, { color: section.accentColor }]}>{section.label}</Text>
+                  <View style={[styles.badge, { backgroundColor: section.accentColor }]}>
                     <Text style={styles.badgeText}>{section.items.length}</Text>
                   </View>
                 </View>
                 <Text style={styles.chevron}>{openSections[section.key] ? '▲' : '▼'}</Text>
               </TouchableOpacity>
 
-              {/* Items */}
               {openSections[section.key] && (
                 <View style={styles.itemList}>
-                  {section.items.length === 0 ? (
-                    <Text style={styles.sectionEmpty}>No items here</Text>
-                  ) : (
-                    section.items.map((item) => (
-                      <InventoryItem
-                        key={item.id}
-                        item={item}
-                        onUse={(newQty) => handleUse(item, newQty)}
-                        onDelete={() => handleDelete(item)}
-                      />
-                    ))
-                  )}
+                  {section.items.map((item) => (
+                    <InventoryItem
+                      key={item.id}
+                      item={item}
+                      onUse={(newQty) => handleUse(item, newQty)}
+                      onDelete={() => handleDelete(item)}
+                    />
+                  ))}
                 </View>
               )}
             </View>
@@ -205,63 +198,68 @@ export default function FridgeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe:   { flex: 1, backgroundColor: Colors.fog },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 20,
+    paddingBottom: 14,
   },
-  title: { fontSize: 20, fontWeight: '700', color: '#2D3319' },
-  count: { fontSize: 13, color: '#6B7566' },
-  searchRow: { paddingHorizontal: 20, paddingBottom: 12 },
-  searchInput: {
-    backgroundColor: '#F2F5F0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    fontSize: 15,
-    color: '#2D3319',
+  title: { fontSize: 24, fontWeight: '800', color: Colors.heading, letterSpacing: -0.5 },
+  countBadge: {
+    backgroundColor: Colors.glass,
+    borderRadius: Radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: '#E8EDE6',
+    borderColor: Colors.borderLight,
   },
-  scroll: { flex: 1 },
+  countText: { fontSize: 13, fontWeight: '700', color: Colors.canopy },
+  searchRow: { paddingHorizontal: 20, paddingBottom: 14 },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Shadow.card,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: Colors.heading,
+  },
+  scroll:  { flex: 1 },
   content: { paddingHorizontal: 20, paddingBottom: 32 },
   section: { marginBottom: 16 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 10,
-    paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionEmoji: { fontSize: 16 },
-  sectionLabel: { fontSize: 14, fontWeight: '700' },
+  sectionLeft:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionDot:   { width: 8, height: 8, borderRadius: 4 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
   badge: {
-    borderRadius: 10,
-    paddingHorizontal: 7,
+    borderRadius: Radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     minWidth: 22,
     alignItems: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  chevron: { fontSize: 11, color: '#6B7566' },
-  itemList: {},
-  sectionEmpty: {
-    fontSize: 13,
-    color: '#A8B89F',
-    textAlign: 'center',
-    paddingVertical: 12,
-    fontStyle: 'italic',
-  },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyEmoji: { fontSize: 64, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#4A5D43', marginBottom: 8 },
-  emptySub: { fontSize: 14, color: '#6B7566', textAlign: 'center', paddingHorizontal: 32 },
+  badgeText: { color: Colors.onDark, fontSize: 11, fontWeight: '700' },
+  chevron:   { fontSize: 10, color: Colors.muted },
+  itemList:  {},
+  empty:     { alignItems: 'center', paddingTop: 80 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.canopy, marginBottom: 8 },
+  emptySub:  { fontSize: 14, color: Colors.muted, textAlign: 'center', paddingHorizontal: 32 },
 });

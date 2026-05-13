@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ShoppingListItem as Item } from '../types';
+import { Colors, Radius } from '../theme';
 
 interface Props {
   item: Item;
@@ -30,9 +31,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F5F0',
+    borderBottomColor: Colors.borderLight,
   },
   checkArea: {
     flex: 1,
@@ -43,19 +44,19 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 22,
     height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#A8B89F',
+    borderRadius: Radius.xs,
+    borderWidth: 1.5,
+    borderColor: Colors.borderMedium,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#6B7F5F',
-    borderColor: '#6B7F5F',
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
-  checkmark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  name: { fontSize: 15, color: '#2D3319', flex: 1 },
-  nameChecked: { color: '#A8B89F', textDecorationLine: 'line-through' },
+  checkmark: { color: Colors.onDark, fontSize: 12, fontWeight: '700' },
+  name: { fontSize: 15, color: Colors.heading, flex: 1, fontWeight: '400' },
+  nameChecked: { color: Colors.muted, textDecorationLine: 'line-through' },
   deleteBtn: { padding: 8 },
-  deleteText: { color: '#D4635E', fontSize: 14, fontWeight: '600' },
+  deleteText: { color: Colors.danger, fontSize: 13, fontWeight: '500' },
 });

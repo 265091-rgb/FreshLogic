@@ -1,27 +1,22 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Home, Package, ChefHat, ClipboardList } from 'lucide-react-native';
 
 import HomeScreen from '../screens/HomeScreen';
 import FridgeScreen from '../screens/FridgeScreen';
 import AddFoodScreen from '../screens/AddFoodScreen';
 import RecipesScreen from '../screens/RecipesScreen';
 import ListScreen from '../screens/ListScreen';
+import { Colors } from '../theme';
 
 const Tab = createBottomTabNavigator();
 
-const ACTIVE = '#6B7F5F';
-const INACTIVE = '#A8B89F';
-
-function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-  return <Text style={{ fontSize: 22, opacity: color === ACTIVE ? 1 : 0.5 }}>{emoji}</Text>;
-}
-
 function AddTabButton({ onPress }: { children?: React.ReactNode; onPress?: () => void }) {
   return (
-    <TouchableOpacity style={styles.addButton} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.addButton} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.addButtonInner}>
-        <Text style={styles.addButtonIcon}>+</Text>
+        <Text style={styles.addButtonPlus}>+</Text>
       </View>
     </TouchableOpacity>
   );
@@ -32,8 +27,8 @@ export default function AppNavigator() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: ACTIVE,
-        tabBarInactiveTintColor: INACTIVE,
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: Colors.sagePale,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
       }}
@@ -42,14 +37,14 @@ export default function AppNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+          tabBarIcon: ({ color, size }) => <Home color={color} size={20} strokeWidth={1.75} />,
         }}
       />
       <Tab.Screen
         name="Fridge"
         component={FridgeScreen}
         options={{
-          tabBarIcon: ({ color }) => <TabIcon emoji="🧊" color={color} />,
+          tabBarIcon: ({ color, size }) => <Package color={color} size={20} strokeWidth={1.75} />,
         }}
       />
       <Tab.Screen
@@ -64,14 +59,14 @@ export default function AppNavigator() {
         name="Recipes"
         component={RecipesScreen}
         options={{
-          tabBarIcon: ({ color }) => <TabIcon emoji="👨‍🍳" color={color} />,
+          tabBarIcon: ({ color, size }) => <ChefHat color={color} size={20} strokeWidth={1.75} />,
         }}
       />
       <Tab.Screen
         name="List"
         component={ListScreen}
         options={{
-          tabBarIcon: ({ color }) => <TabIcon emoji="🛒" color={color} />,
+          tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={20} strokeWidth={1.75} />,
         }}
       />
     </Tab.Navigator>
@@ -80,8 +75,8 @@ export default function AppNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#fff',
-    borderTopColor: '#E8EDE6',
+    backgroundColor: Colors.card,
+    borderTopColor: Colors.borderLight,
     borderTopWidth: 1,
     height: Platform.OS === 'ios' ? 84 : 64,
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
@@ -90,23 +85,30 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
   addButton: {
-    top: -16,
+    top: -18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4A5D43',
+    shadowColor: Colors.forest,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
     elevation: 8,
   },
   addButtonInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#6B7F5F',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addButtonPlus: {
+    color: Colors.onDark,
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 32,
   },
 });
